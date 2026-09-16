@@ -7,7 +7,7 @@
 </style><link rel="icon" href="/velune.ico"></head><body>
 <header><div class="logo"><img class="velune-logo" src="/velune.png" alt="Логотип Velune"> Velune <span class="tag">/ OBS overlay</span></div><div class="header-tools"><button id="to-tray" class="tray-button" hidden title="Скрыть окно, оставив виджет работать">Свернуть в фон ↘</button><span class="connection" id="connection">Подключаемся…</span></div></header>
 <main><div class="eyebrow">Твой стрим. Твой звук.</div><h1>Музыка в кадре</h1><p>Настрой оверлей под свой стиль и добавь его в OBS.</p>
-<div class="workspace"><aside class="panel"><div class="section-label"><h2>Источник музыки</h2><span class="step">01</span></div><label class="field-label" for="source">Откуда показывать трек</label><div class="source-row"><select id="source"><option value="">Яндекс Музыка · автоматически</option></select><button class="icon-button" id="refresh" aria-label="Обновить список источников" title="Обновить источники">↻</button></div><p class="hint" id="source-hint">Запусти музыку, чтобы приложение появилось в списке.</p><div class="divider"></div><div class="section-label"><h2>Стиль виджета</h2><span class="step">02</span></div><div class="themes" id="themes">
+<div class="workspace"><aside class="panel"><div class="section-label"><h2>Источник музыки</h2><span class="step">01</span></div><label class="field-label" for="source">Откуда показывать трек</label><div class="source-row"><select id="source"><option value="">Активный трек · автоматически</option></select><button class="icon-button" id="refresh" aria-label="Обновить список источников" title="Обновить источники">↻</button></div><p class="hint" id="source-hint">Запусти музыку в приложении или браузере, чтобы источник появился в списке.</p><div class="divider"></div><div class="section-label"><h2>Стиль виджета</h2><span class="step">02</span></div><div class="themes" id="themes">
 <button class="theme" data-theme="clean" aria-pressed="true"><span class="swatches"><i style="--swatch:#b7a3ff"></i><i style="--swatch:#f5f2ff"></i></span><span class="theme-name">Луна</span><small>Чистый · лавандовый</small></button>
 <button class="theme" data-theme="mint" aria-pressed="false"><span class="swatches"><i style="--swatch:#8cf2c9"></i><i style="--swatch:#d8fff0"></i></span><span class="theme-name">Мята</span><small>Свежий · округлый</small></button>
 <button class="theme" data-theme="sunset" aria-pressed="false"><span class="swatches"><i style="--swatch:#ffc18c"></i><i style="--swatch:#ffe3c9"></i></span><span class="theme-name">Закат</span><small>Тёплый · лаконичный</small></button>
@@ -46,12 +46,12 @@ async function refreshSources() {
         const response = await fetch('/api/sources', {cache:'no-store', signal:AbortSignal.timeout(4000)});
         if (!response.ok) throw new Error('offline');
         const data = await response.json(); sources = data.sources; available = data.available; defaultSource = data.default_source;
-        const options = [new Option(defaultSource ? defaultSource + ' · по умолчанию' : 'Яндекс Музыка · автоматически', '')];
+        const options = [new Option(defaultSource ? defaultSource + ' · по умолчанию' : 'Активный трек · автоматически', '')];
         for (const source of sources) options.push(new Option(source.id + (source.playing ? ' · играет' : ' · на паузе'), source.id));
         if (selected && !sources.some(s => s.id === selected)) options.push(new Option(selected + ' · недоступен', selected));
         if (document.activeElement !== $('source')) { $('source').replaceChildren(...options); $('source').value = selected; }
         $('connection').textContent = available ? 'Windows Media · подключено' : 'Ожидаем Windows Media'; $('connection').classList.toggle('ok', available);
-        $('source-hint').textContent = sources.length ? 'Источник закрепляется в ссылке. Можно создать разные виджеты для разных приложений.' : 'Запусти музыку, чтобы приложение появилось в списке.';
+        $('source-hint').textContent = sources.length ? 'Для Яндекс Браузера выбери browser.exe или оставь активный трек автоматически.' : 'Запусти музыку в приложении или браузере, чтобы источник появился в списке.';
     } catch {available = false; $('connection').textContent = 'Сервер недоступен'; $('connection').classList.remove('ok');}
     finally {refreshing = false; $('refresh').disabled = false; caption();}
 }

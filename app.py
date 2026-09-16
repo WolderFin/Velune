@@ -84,10 +84,18 @@ def is_playing(session):
 
 def choose_session(manager, source=None):
     sessions = list(manager.get_sessions())
-    matches = [s for s in sessions if
-               (source.casefold() in s.source_app_user_model_id.casefold() if source
-                else "yandex" in s.source_app_user_model_id.casefold())]
-    return next((s for s in matches if is_playing(s)), matches[0] if matches else None)
+    if source:
+        matches = [s for s in sessions
+                   if source.casefold() in s.source_app_user_model_id.casefold()]
+        return next((s for s in matches if is_playing(s)), matches[0] if matches else None)
+
+    # Yandex Browser commonly exposes its media session as browser.exe rather
+    # than an identifier containing "yandex". Prefer an explicit Yandex
+    # session, then fall back to whichever Windows media session is playing.
+    yandex = [s for s in sessions if "yandex" in s.source_app_user_model_id.casefold()]
+    return (next((s for s in yandex if is_playing(s)), None)
+            or next((s for s in sessions if is_playing(s)), None)
+            or (yandex[0] if yandex else None))
 
 
 async def read_state(manager, source=None):

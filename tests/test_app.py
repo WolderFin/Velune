@@ -33,7 +33,13 @@ class OverlayTests(unittest.TestCase):
         manager = Obj(get_sessions=lambda: [browser, paused, playing])
         self.assertIs(app.choose_session(manager), playing)
         self.assertIs(app.choose_session(manager, "CHROME.EXE"), browser)
-        self.assertIsNone(app.choose_session(Obj(get_sessions=lambda: [browser])))
+        self.assertIs(app.choose_session(Obj(get_sessions=lambda: [browser])), browser)
+
+    def test_automatic_selection_falls_back_to_playing_browser(self):
+        paused = session("Yandex.Music", False)
+        browser = session("browser.exe", True)
+        manager = Obj(get_sessions=lambda: [paused, browser])
+        self.assertIs(app.choose_session(manager), browser)
 
     def test_empty_session_clears_every_field(self):
         app.STATE.update(title="Old", source="Old", cover="Old", playing=True)
