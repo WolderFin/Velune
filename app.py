@@ -21,6 +21,7 @@ LOCK = threading.Lock()
 COVERS = OrderedDict()
 SOURCE_STATES = {}
 SOURCES = []
+EXTERNAL_STATES = {}
 DEFAULT_SOURCE = None
 
 
@@ -163,7 +164,12 @@ async def poll(source, stop):
 
 def snapshot(source=None):
     with LOCK:
-        result = dict(SOURCE_STATES.get(source, empty_state()) if source else STATE)
+        if source:
+            result = dict(EXTERNAL_STATES.get(source) or SOURCE_STATES.get(source, empty_state()))
+        else:
+            browser = [state for state in EXTERNAL_STATES.values()
+                       if state["playing"] and time.time() - state["updated_at"] <= STALE_AFTER]
+            result = dict(max(browser, key=lambda state: state["updated_at"]) if browser else STATE)
     if time.time() - result["updated_at"] > STALE_AFTER:
         return empty_state()
     return result
@@ -194,6 +200,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sources":
             with LOCK:
                 sources = list(SOURCES)
+                known = {item["id"] for item in sources}
+                for source_id, state in EXTERNAL_STATES.items():
+                    if time.time() - state["updated_at"] <= STALE_AFTER and source_id not in known:
+                        sources.append(dict(id=source_id, title=state["title"],
+                                            artist=state["artist"], playing=state["playing"]))
             return self.send(json.dumps({"sources": sources, "available": snapshot()["available"], "default_source": DEFAULT_SOURCE}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
         if path == "/api/current":
             return self.send(json.dumps(snapshot(parse_qs(url.query).get("source", [None])[0]), ensure_ascii=False).encode(), "application/json; charset=utf-8")
@@ -206,6 +217,53 @@ class Handler(BaseHTTPRequestHandler):
             healthy = snapshot()["available"]
             return self.send(json.dumps({"ok": healthy}).encode(), "application/json", 200 if healthy else 503)
         self.send(b"", "text/plain", 404)
+
+    def do_OPTIONS(self):
+        if self.path != "/api/browser-track":
+            return self.send(b"", "text/plain", 404)
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin", "null"))
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path != "/api/browser-track":
+            return self.send(b"", "text/plain", 404)
+        origin = self.headers.get("Origin", "")
+        if origin and not origin.startswith("chrome-extension://"):
+            return self.send(b'{"ok":false}', "application/json", 403)
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 65536:
+                raise ValueError("invalid body size")
+            payload = json.loads(self.rfile.read(size))
+            source = str(payload.get("source", "browser"))[:200]
+            title = str(payload.get("title", ""))[:500].strip()
+            if not title:
+                with LOCK:
+                    EXTERNAL_STATES.pop(source, None)
+                return self.send(b'{"ok":true}', "application/json")
+            cover = str(payload.get("cover", ""))[:2000]
+            if cover and not cover.startswith(("https://", "http://")):
+                cover = ""
+            state = dict(title=title, artist=str(payload.get("artist", ""))[:500].strip(),
+                         album=str(payload.get("album", ""))[:500].strip(), cover=cover,
+                         position=max(0, float(payload.get("position", 0) or 0)),
+                         duration=max(0, float(payload.get("duration", 0) or 0)),
+                         playing=bool(payload.get("playing", True)), source=source,
+                         updated_at=time.time(), available=True)
+            with LOCK:
+                EXTERNAL_STATES[source] = state
+            body = b'{"ok":true}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", origin or "null")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (ValueError, TypeError, json.JSONDecodeError):
+            self.send(b'{"ok":false}', "application/json", 400)
 
     def log_message(self, *args):
         pass

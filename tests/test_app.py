@@ -8,6 +8,7 @@ from http.server import ThreadingHTTPServer
 from types import SimpleNamespace as Obj
 from unittest.mock import AsyncMock, patch
 from urllib.request import urlopen
+from urllib.request import Request
 from urllib.error import HTTPError
 
 import app
@@ -26,6 +27,7 @@ class OverlayTests(unittest.TestCase):
         app.STATE.update(app.empty_state())
         app.COVERS.clear()
         app.SOURCE_STATES.clear()
+        app.EXTERNAL_STATES.clear()
         app.SOURCES.clear()
 
     def test_selection_excludes_other_players_and_prefers_playing(self):
@@ -106,6 +108,26 @@ class OverlayTests(unittest.TestCase):
             app.STATE.update(title="Old", playing=True, updated_at=time.time() - 10)
             with urlopen(base + "/api/current") as response:
                 self.assertEqual(json.load(response)["title"], "")
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join()
+
+    def test_browser_bridge_supplies_playing_track(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            payload = json.dumps({"source": "browser:vk.com", "title": "VK Track",
+                                  "artist": "Artist", "playing": True}).encode()
+            request = Request(f"http://127.0.0.1:{server.server_port}/api/browser-track",
+                              data=payload, method="POST",
+                              headers={"Content-Type": "application/json",
+                                       "Origin": "chrome-extension://test"})
+            with urlopen(request) as response:
+                self.assertTrue(json.load(response)["ok"])
+            self.assertEqual(app.snapshot()["title"], "VK Track")
+            self.assertEqual(app.snapshot("browser:vk.com")["artist"], "Artist")
         finally:
             server.shutdown()
             server.server_close()

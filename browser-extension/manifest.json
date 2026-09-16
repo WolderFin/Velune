@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Velune Browser Bridge",
+  "version": "1.0.2",
+  "description": "Передаёт текущий трек VK и Яндекс Музыки в локальную Velune.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8765/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "Velune Browser Bridge", "default_popup": "popup.html"},
+  "content_scripts": [{
+    "matches": ["*://vk.com/*", "*://*.vk.com/*", "*://vk.ru/*", "*://*.vk.ru/*"],
+    "js": ["main.js"],
+    "run_at": "document_idle",
+    "world": "MAIN"
+  }, {
+    "matches": ["*://vk.com/*", "*://*.vk.com/*", "*://vk.ru/*", "*://*.vk.ru/*", "*://music.yandex.ru/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}

@@ -3,7 +3,7 @@ from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parents[1]
-FOLDERS = (".github", "docs", "licenses", "scripts", "static", "tests")
+FOLDERS = (".github", "browser-extension", "docs", "licenses", "scripts", "static", "tests")
 
 
 def main():

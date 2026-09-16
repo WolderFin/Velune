@@ -14,6 +14,7 @@ def main():
                  ROOT / "THIRD_PARTY_NOTICES.md"]
     files = list(top_level)
     files.append(ROOT / "docs" / "SIGNING-AND-ANTIVIRUS.md")
+    files += sorted(path for path in (ROOT / "browser-extension").rglob("*") if path.is_file())
     files += sorted(path for path in (ROOT / "licenses").rglob("*") if path.is_file())
     with ZipFile(target, "w", ZIP_DEFLATED) as archive:
         for path in files:

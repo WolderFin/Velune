@@ -3,6 +3,8 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 assets = [(f'static/{name}', 'static') for name in
           ('index.html', 'overlay.html', 'widget.css', 'pixel.ttf', 'pixel-LICENSE.txt', 'velune.png', 'velune.ico', 'wolderfin-logo.svg')]
+assets += [(f'browser-extension/{name}', 'browser-extension') for name in
+           ('manifest.json', 'background.js', 'content.js', 'main.js', 'popup.html', 'popup.js')]
 a = Analysis(['desktop.py'], pathex=[], binaries=[],
              datas=assets + [('LICENSE', '.'), ('THIRD_PARTY_NOTICES.md', '.'), ('licenses', 'licenses')] + collect_data_files('webview'),
              hiddenimports=collect_submodules('winrt') + ['webview.platforms.winforms', 'webview.platforms.edgechromium', 'pystray._win32'],
