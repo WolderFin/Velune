@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import json
 import os
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -31,6 +32,45 @@ def empty_state():
 
 
 STATE = empty_state()
+
+
+def clean_text(value, limit=500):
+    """Return display text containing only valid Unicode scalar values.
+
+    Some Windows media providers expose UTF-16 surrogate pairs (or an
+    unmatched surrogate) directly.  Valid pairs are joined and malformed
+    code units are replaced without removing emoji or private-use glyphs.
+    """
+    if value is None:
+        return ""
+    try:
+        text = str(value)
+    except Exception:
+        return ""
+    text = text.encode("utf-16-le", "surrogatepass").decode("utf-16-le", "replace")
+    return text[:limit]
+
+
+def json_bytes(payload):
+    """Serialize API data without letting malformed provider text break HTTP."""
+    return json.dumps(payload, ensure_ascii=False).encode("utf-8", "replace")
+
+
+def safe_log(*parts):
+    """Write a log line when possible; logging must never stop media polling."""
+    try:
+        stream = getattr(sys, "stdout", None)
+        if stream is None:
+            return
+        message = " ".join(clean_text(part, 4000) for part in parts)
+        try:
+            print(message, file=stream)
+        except UnicodeEncodeError:
+            encoding = getattr(stream, "encoding", None) or "utf-8"
+            printable = message.encode(encoding, "backslashreplace").decode(encoding)
+            print(printable, file=stream)
+    except Exception:
+        pass
 
 
 async def thumb(ref):
@@ -116,16 +156,18 @@ async def read_state(manager, source=None):
             position += max(0, time.time() - (updated.universal_time / 10_000_000 - 11644473600))
     if duration:
         position = min(position, duration)
-    return dict(title=props.title or "", artist=props.artist or "",
-                album=props.album_title or "", cover=cover_url(await thumb(props.thumbnail)),
+    return dict(title=clean_text(props.title), artist=clean_text(props.artist),
+                album=clean_text(props.album_title), cover=cover_url(await thumb(props.thumbnail)),
                 position=position, duration=duration, playing=playing,
-                source=session.source_app_user_model_id, updated_at=time.time(), available=True)
+                source=clean_text(session.source_app_user_model_id, 200),
+                updated_at=time.time(), available=True)
 
 
 async def poll(source, stop):
     manager = None
     last = None
     while not stop.is_set():
+        track_log = None
         try:
             if manager is None:
                 manager = await MediaManager.request_async()
@@ -150,7 +192,7 @@ async def poll(source, stop):
                 SOURCES[:] = sources
             key = (current["source"], current["title"], current["artist"], current["album"])
             if key != last and current["title"]:
-                print(f"[TRACK] {current['artist']} — {current['title']}")
+                track_log = f"[TRACK] {current['artist']} — {current['title']}"
             last = key
         except Exception as error:
             manager = None
@@ -158,7 +200,9 @@ async def poll(source, stop):
                 STATE.update(empty_state())
                 SOURCE_STATES.clear()
                 SOURCES.clear()
-            print("[ERROR]", repr(error))
+            safe_log("[ERROR]", repr(error))
+        if track_log:
+            safe_log(track_log)
         await asyncio.sleep(1)
 
 
@@ -205,9 +249,9 @@ class Handler(BaseHTTPRequestHandler):
                     if time.time() - state["updated_at"] <= STALE_AFTER and source_id not in known:
                         sources.append(dict(id=source_id, title=state["title"],
                                             artist=state["artist"], playing=state["playing"]))
-            return self.send(json.dumps({"sources": sources, "available": snapshot()["available"], "default_source": DEFAULT_SOURCE}, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return self.send(json_bytes({"sources": sources, "available": snapshot()["available"], "default_source": DEFAULT_SOURCE}), "application/json; charset=utf-8")
         if path == "/api/current":
-            return self.send(json.dumps(snapshot(parse_qs(url.query).get("source", [None])[0]), ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            return self.send(json_bytes(snapshot(parse_qs(url.query).get("source", [None])[0])), "application/json; charset=utf-8")
         if path.startswith("/covers/"):
             with LOCK:
                 image = COVERS.get(path.removeprefix("/covers/"))
@@ -215,7 +259,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(*image)
         if path == "/health":
             healthy = snapshot()["available"]
-            return self.send(json.dumps({"ok": healthy}).encode(), "application/json", 200 if healthy else 503)
+            return self.send(json_bytes({"ok": healthy}), "application/json", 200 if healthy else 503)
         self.send(b"", "text/plain", 404)
 
     def do_OPTIONS(self):
@@ -238,17 +282,17 @@ class Handler(BaseHTTPRequestHandler):
             if not 0 < size <= 65536:
                 raise ValueError("invalid body size")
             payload = json.loads(self.rfile.read(size))
-            source = str(payload.get("source", "browser"))[:200]
-            title = str(payload.get("title", ""))[:500].strip()
+            source = clean_text(payload.get("source", "browser"), 200)
+            title = clean_text(payload.get("title", ""), 500).strip()
             if not title:
                 with LOCK:
                     EXTERNAL_STATES.pop(source, None)
                 return self.send(b'{"ok":true}', "application/json")
-            cover = str(payload.get("cover", ""))[:2000]
+            cover = clean_text(payload.get("cover", ""), 2000)
             if cover and not cover.startswith(("https://", "http://")):
                 cover = ""
-            state = dict(title=title, artist=str(payload.get("artist", ""))[:500].strip(),
-                         album=str(payload.get("album", ""))[:500].strip(), cover=cover,
+            state = dict(title=title, artist=clean_text(payload.get("artist", ""), 500).strip(),
+                         album=clean_text(payload.get("album", ""), 500).strip(), cover=cover,
                          position=max(0, float(payload.get("position", 0) or 0)),
                          duration=max(0, float(payload.get("duration", 0) or 0)),
                          playing=bool(payload.get("playing", True)), source=source,
@@ -273,7 +317,8 @@ async def list_sources():
     manager = await MediaManager.request_async()
     for session in manager.get_sessions():
         props = await session.try_get_media_properties_async()
-        print(f"{session.source_app_user_model_id}: {props.artist} — {props.title}")
+        safe_log(f"{clean_text(session.source_app_user_model_id, 200)}: "
+                 f"{clean_text(props.artist)} — {clean_text(props.title)}")
 
 
 def main():
@@ -302,7 +347,7 @@ def main():
     background = None
     try:
         if args.headless:
-            print("Velune OBS server: http://127.0.0.1:8765")
+            safe_log("Velune OBS server: http://127.0.0.1:8765")
             while not stop.wait(1):
                 pass
         else:

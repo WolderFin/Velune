@@ -1,5 +1,7 @@
 import asyncio
+import io
 import json
+import sys
 import threading
 import time
 import unittest
@@ -14,11 +16,11 @@ from urllib.error import HTTPError
 import app
 
 
-def session(source, playing=True, thumbnail=None):
+def session(source, playing=True, thumbnail=None, title="Track", artist="Artist", album="Album"):
     s = Obj(source_app_user_model_id=source)
     s.get_playback_info = lambda: Obj(playback_status=Obj(name="PLAYING" if playing else "PAUSED"))
     s.get_timeline_properties = lambda: Obj(position=timedelta(seconds=10), end_time=timedelta(seconds=100), last_updated_time=datetime.now(timezone.utc))
-    s.try_get_media_properties_async = AsyncMock(return_value=Obj(title="Track", artist="Artist", album_title="Album", thumbnail=thumbnail))
+    s.try_get_media_properties_async = AsyncMock(return_value=Obj(title=title, artist=artist, album_title=album, thumbnail=thumbnail))
     return s
 
 
@@ -50,6 +52,29 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(state["cover"], "")
         self.assertFalse(state["playing"])
         self.assertTrue(state["available"])
+
+    def test_media_text_preserves_emoji_and_repairs_utf16_surrogates(self):
+        self.assertEqual(app.clean_text("LAVA 🔺 \ue001"), "LAVA 🔺 \ue001")
+        self.assertEqual(app.clean_text("rocket \ud83d\ude80"), "rocket 🚀")
+        self.assertEqual(app.clean_text("broken \ud83d"), "broken \ufffd")
+        state = asyncio.run(app.read_state(Obj(get_sessions=lambda: [
+            session("browser.exe", title="Song 🔥 \ue001", artist="Artist \ud83d")
+        ])))
+        self.assertEqual(state["title"], "Song 🔥 \ue001")
+        self.assertEqual(state["artist"], "Artist \ufffd")
+        state["artist"].encode("utf-8")
+
+    def test_safe_log_handles_console_without_emoji_support(self):
+        output = io.BytesIO()
+        console = io.TextIOWrapper(output, encoding="cp1251", errors="strict")
+        with patch.object(sys, "stdout", console):
+            app.safe_log("[TRACK]", "Song 🔥")
+            console.flush()
+        self.assertIn(b"\\U0001f525", output.getvalue())
+
+    def test_json_bytes_cannot_be_broken_by_provider_unicode(self):
+        payload = json.loads(app.json_bytes({"title": "Broken \ud83d"}))
+        self.assertEqual(payload["title"], "Broken ?")
 
     def test_cover_identity_and_missing_thumbnail(self):
         old = app.cover_url(b"\x89PNG old")
