@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Music • OBS</title><link rel="stylesheet" href="/widget.css"></head>
+<body><main class="stage"><section class="card" id="card"><div class="cover-wrap"><span class="ear left"></span><span class="ear right"></span><span class="placeholder">♫</span><img class="cover" id="cover" alt="Обложка трека"></div><div class="info"><div class="label"><span class="dot"></span><span id="status">Сейчас играет</span><span id="demo" hidden> · ПРИМЕР</span></div><div class="title" id="title">—</div><div class="artist" id="artist">—</div><div class="trackbar"><div class="progress" id="progress"></div></div><div class="times"><span id="pos">0:00</span><span id="dur">0:00</span></div></div><div class="wave" id="wave"><i></i><i></i><i></i><i></i><i></i></div><span id="play" hidden></span></section></main>
+<script>
+    const params = new URLSearchParams(location.search);
+    const theme = ["clean", "mint", "sunset", "neko"].includes(params.get("theme")) ? params.get("theme") : "clean";
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.backdrop = params.get("backdrop") === "1" ? "on" : "off";
+    document.documentElement.dataset.glow = params.get("glow") === "1" ? "on" : "off";
+    const endpoint = "/api/current" + (params.get("source") ? "?source=" + encodeURIComponent(params.get("source")) : "");
+    const $ = id => document.getElementById(id);
+    const card = $("card"), cover = $("cover"), title = $("title"), artist = $("artist");
+    const progress = $("progress"), pos = $("pos"), dur = $("dur"), play = $("play"), wave = $("wave");
+    let state = null, lastKey = "", localPosition = 0, clockAt = performance.now();
+    let receivedAt = 0, requestedCover = "", generation = 0, transition = null;
+    const fmt = seconds => {
+        const s = Math.max(0, Math.floor(Number(seconds) || 0));
+        return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    };
+    function hide() {
+        clearTimeout(transition);
+        transition = null;
+        generation++;
+        state = null;
+        lastKey = "";
+        requestedCover = "";
+        cover.classList.remove("ready");
+        cover.removeAttribute("src");
+        card.classList.remove("visible");
+        card.classList.add("leaving");
+        progress.style.width = "0%";
+        pos.textContent = dur.textContent = "0:00";
+    }
+    function render(s, fresh) {
+        if (!s.title && !s.artist) return hide();
+        const token = ++generation;
+        clearTimeout(transition);
+        transition = null;
+        const apply = () => {
+            if (token !== generation) return;
+            title.textContent = s.title || "Без названия";
+            artist.textContent = s.artist || "Неизвестный исполнитель";
+            play.textContent = s.playing ? "Ⅱ" : "▶";
+            wave.classList.toggle("paused", !s.playing);
+            $("status").textContent = s.playing ? "Сейчас играет" : "На паузе";
+            dur.textContent = fmt(s.duration);
+            if ((s.cover || "") !== requestedCover) {
+                requestedCover = s.cover || "";
+                cover.classList.remove("ready");
+                cover.removeAttribute("src");
+                if (requestedCover) {
+                    const url = requestedCover, img = new Image();
+                    img.onload = () => {
+                        if (!state || state.cover !== url || requestedCover !== url) return;
+                        cover.src = url;
+                        cover.classList.add("ready");
+                    };
+                    img.onerror = () => {
+                        if (requestedCover === url) requestedCover = "";
+                    };
+                    img.src = url;
+                }
+            }
+            card.classList.remove("leaving");
+            card.classList.add("visible");
+        };
+        if (fresh) {
+            card.classList.remove("visible");
+            card.classList.add("leaving");
+            requestedCover = "";
+            cover.classList.remove("ready");
+            cover.removeAttribute("src");
+            apply();
+        } else apply();
+    }
+    async function poll() {
+        try {
+            const r = await fetch(endpoint, {cache: "no-store", signal: AbortSignal.timeout(3000)});
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const n = await r.json();
+            if (!n.available || !Number.isFinite(n.updated_at) || Date.now() / 1000 - n.updated_at > 5) {
+                hide();
+                return;
+            }
+            receivedAt = performance.now();
+            const k = JSON.stringify([n.source, n.artist, n.title, n.album]);
+            const fresh = k !== lastKey;
+            const predicted = localPosition + (receivedAt - clockAt) / 1000;
+            if (fresh || !state || state.playing !== n.playing || !n.playing || Math.abs(n.position - predicted) > 2) {
+                localPosition = Number(n.position) || 0;
+                clockAt = receivedAt;
+            }
+            lastKey = k;
+            state = n;
+            render(n, fresh);
+        } catch (e) {
+            hide();
+        } finally {
+            setTimeout(poll, 1000);
+        }
+    }
+    if (params.get("demo") === "1") {
+        state = {title: "Тёплый вечер", artist: "Твой любимый плейлист", playing: true, duration: 224, position: 48, cover: "", source: "demo"};
+        receivedAt = performance.now(); localPosition = 48; render(state, false);
+        $("demo").hidden = false;
+    } else poll();
+    setInterval(() => {
+        if (!state) return;
+        if (params.get("demo") !== "1" && performance.now() - receivedAt > 5000) return hide();
+        let p = localPosition + (state.playing ? (performance.now() - clockAt) / 1000 : 0);
+        const duration = Math.max(0, Number(state.duration) || 0);
+        if (duration) p = Math.min(p, duration);
+        pos.textContent = fmt(p);
+        progress.style.width = duration ? Math.max(0, Math.min(100, p / duration * 100)) + "%" : "0%";
+    }, 100);
+</script>
+</body></html>

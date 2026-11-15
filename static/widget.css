@@ -1,0 +1,25 @@
+@font-face{font-family:Pixel;src:url('/pixel.ttf') format('truetype');font-display:swap}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent!important;font-family:'Segoe UI',Arial,sans-serif;color:var(--text)}
+:root{--accent:#b7a3ff;--text:#fff;--secondary:#d8d5e4;--cover-radius:16px;--title-size:27px}
+:root[data-theme=mint]{--accent:#8cf2c9;--secondary:#d8fff0;--cover-radius:50%}
+:root[data-theme=sunset]{--accent:#ffc18c;--secondary:#ffe3c9;--cover-radius:5px}
+:root[data-theme=neko]{--accent:#ff99cd;--text:#ffd8eb;--secondary:#ffb5d8;--cover-radius:8px;--title-size:19px;font-family:Pixel,monospace}
+.stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:24px 20px}
+.card{display:flex;align-items:center;gap:22px;width:min(660px,100%);opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;background:none;border:none;box-shadow:none}
+.card.visible{opacity:1;transform:none}.card.leaving{opacity:0;transform:translateY(-6px)}
+.cover-wrap{position:relative;flex:0 0 104px;height:104px}.placeholder{position:absolute;inset:0;display:grid;place-items:center;color:var(--accent);font-size:48px;border:1px solid var(--accent);border-radius:var(--cover-radius)}
+.cover{position:absolute;width:100%;height:100%;object-fit:cover;border-radius:var(--cover-radius);opacity:0;transition:opacity .2s}.cover.ready{opacity:1}
+.info{flex:1;min-width:0;text-shadow:0 1px 3px #0009}.label{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}.dot{height:5px;width:5px;flex:none;background:var(--accent);border-radius:50%}
+.title{font-size:var(--title-size);font-weight:650;line-height:1.4;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.artist{font-size:14px;color:var(--secondary);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trackbar{margin-top:15px;height:3px;background:#ffffff30;border-radius:3px;overflow:hidden}.progress{height:100%;background:var(--accent);width:0;transition:width .1s linear}.times{display:flex;justify-content:space-between;font-size:10px;color:var(--secondary);margin-top:6px;font-variant-numeric:tabular-nums}
+.wave{display:flex;gap:3px;align-items:center;height:26px;color:var(--accent)}.wave i{display:block;width:3px;height:15px;background:currentColor;border-radius:2px;animation:wave .8s ease-in-out infinite alternate}.wave i:nth-child(2){height:24px;animation-delay:-.3s}.wave i:nth-child(3){height:10px;animation-delay:-.5s}.wave i:nth-child(4){height:20px;animation-delay:-.2s}.paused i{animation-play-state:paused;opacity:.5}@keyframes wave{to{transform:scaleY(.35)}}
+.ear{display:none}:root[data-theme=neko] .ear{display:block;position:absolute;z-index:2;top:-17px;width:29px;height:27px;background:var(--accent);clip-path:polygon(0 100%,12% 0,100% 100%)}.ear.left{left:1px;transform:rotate(-9deg)}.ear.right{right:1px;transform:scaleX(-1) rotate(-9deg)}.ear:after{content:'';position:absolute;inset:7px 7px 3px;background:#ffdae9;clip-path:polygon(0 100%,12% 0,100% 100%)}
+:root[data-theme=neko] body{font-family:Pixel,monospace}:root[data-theme=neko] .title{font-weight:400;line-height:1.65}:root[data-theme=neko] .artist{font-size:10px;line-height:1.7}:root[data-theme=neko] .label{font-size:7px;letter-spacing:0}:root[data-theme=neko] .times{font-size:7px}:root[data-theme=neko] .trackbar{height:4px;border-radius:0}:root[data-theme=neko] .wave i{border-radius:0}
+@media(max-width:500px){.stage{padding:24px 12px}.card{gap:14px}.cover-wrap{flex-basis:76px;height:76px}.title{font-size:21px}.wave{display:none}:root[data-theme=neko] .title{font-size:13px}:root[data-theme=neko] .artist{font-size:8px}.label{font-size:8px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+:root[data-backdrop=on] .card{background:rgba(18,17,25,.82);border:1px solid rgba(255,255,255,.13);border-radius:22px;padding:18px}
+:root[data-glow=on] .cover-wrap{filter:drop-shadow(0 0 14px color-mix(in srgb,var(--accent) 45%,transparent))}
+:root[data-glow=on] .progress{box-shadow:0 0 10px var(--accent)}
+:root[data-glow=on] .wave{filter:drop-shadow(0 0 6px var(--accent))}
+:root[data-theme=neko][data-backdrop=on] .card{border-radius:10px;border-color:#ff99cd55}
