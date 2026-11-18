@@ -7,6 +7,13 @@
     document.documentElement.dataset.theme = theme;
     document.documentElement.dataset.backdrop = params.get("backdrop") === "1" ? "on" : "off";
     document.documentElement.dataset.glow = params.get("glow") === "1" ? "on" : "off";
+    if (params.get("custom") === "1") {
+        const custom = document.createElement("link");
+        custom.rel = "stylesheet";
+        custom.href = "/api/custom-css?v=" + encodeURIComponent(params.get("cssv") || "1");
+        document.head.appendChild(custom);
+        document.documentElement.dataset.custom = "on";
+    }
     const endpoint = "/api/current" + (params.get("source") ? "?source=" + encodeURIComponent(params.get("source")) : "");
     const $ = id => document.getElementById(id);
     const card = $("card"), cover = $("cover"), title = $("title"), artist = $("artist");

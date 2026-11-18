@@ -13,13 +13,13 @@ function element(id) {
     }
     return elements.get(id);
 }
-const intervals = [], images = [], timers = new Map();
+const intervals = [], images = [], customLinks = [], timers = new Map();
 let timerId = 0, now = 0, fail = false;
 let requestedEndpoint;
 let response = {available: true, updated_at: Date.now() / 1000, title: 'Track', artist: 'Artist',
     album: '', source: 'Yandex', cover: '/covers/first', position: 20, duration: 100, playing: true};
 const context = vm.createContext({document: {getElementById: element, querySelector: element,
-    documentElement: element('root')}, performance: {now: () => now}, Date, Number, Math, String,
+    documentElement: element('root'), createElement: () => ({}), head: {appendChild(link) {customLinks.push(link)}}}, performance: {now: () => now}, Date, Number, Math, String,
     JSON, Error, AbortSignal, URLSearchParams, location: {search: '?theme=neko&source=Yandex&backdrop=1&glow=1'}, encodeURIComponent, Image: class {constructor() {images.push(this)}},
     setTimeout(fn) {const id = ++timerId; timers.set(id, fn); return id},
     clearTimeout(id) {timers.delete(id)}, setInterval(fn) {intervals.push(fn)},
@@ -51,3 +51,12 @@ const apply = () => {const id = vm.runInContext('transition', context); if (time
     assert.equal(element('card').classList.contains('visible'), false);
     console.log('Frontend: cover cache, missing cover, unknown duration, offline recovery and stale watchdog OK');
 })().catch(error => {console.error(error); process.exitCode = 1});
+
+const customContext = vm.createContext({document: {getElementById: element, querySelector: element,
+    documentElement: element('custom-root'), createElement: () => ({}), head: {appendChild(link) {customLinks.push(link)}}},
+    performance: {now: () => 0}, Date, Number, Math, String, JSON, Error, AbortSignal, URLSearchParams,
+    location: {search: '?demo=1&custom=1&cssv=42'}, encodeURIComponent, Image: class {},
+    setTimeout() {}, clearTimeout() {}, setInterval() {}, fetch: async () => ({ok:true,json:async()=>({})})});
+vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], customContext);
+assert.equal(element('custom-root').dataset.custom, 'on');
+assert.equal(customLinks.at(-1).href, '/api/custom-css?v=42');

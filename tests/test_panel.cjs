@@ -1,6 +1,6 @@
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
 const elements = new Map(), stored = new Map();
-stored.set('music-studio', JSON.stringify({theme:'neko',source:'Browser & Music',backdrop:true,glow:false}));
+stored.set('music-studio', JSON.stringify({theme:'neko',source:'Browser & Music',backdrop:true,glow:false,customEnabled:true}));
 const element = id => {
     if (!elements.has(id)) elements.set(id, {value:'',src:'',style:{},checked:false,
         handlers:{},addEventListener(name, fn){this.handlers[name]=fn},setAttribute(){},replaceChildren(){},
@@ -10,13 +10,16 @@ const element = id => {
 const context = vm.createContext({window:{addEventListener(){}}, document:{getElementById:element,querySelectorAll:()=>[],activeElement:null},
     localStorage:{getItem:key=>stored.get(key),setItem:(key,value)=>stored.set(key,value)},
     location:{origin:'http://127.0.0.1:8765'}, URL,JSON,String,Option:class{},AbortSignal,
-    fetch:async()=>({ok:true,json:async()=>({sources:[],available:true})}),setInterval(){}});
+    fetch:async(url, options={})=>url==='/api/custom-css'
+        ? ({ok:true,text:async()=>'.title { color: hotpink; }',json:async()=>({ok:true})})
+        : ({ok:true,json:async()=>({sources:[],available:true})}),setInterval(){}});
 vm.runInContext(fs.readFileSync('static/index.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1],context);
 let url = new URL(element('url').value);
 assert.equal(url.searchParams.get('source'),'Browser & Music');
 assert.equal(url.searchParams.get('theme'),'neko');
 assert.equal(url.searchParams.get('backdrop'),'1');
 assert.equal(url.searchParams.has('glow'),false);
+assert.equal(url.searchParams.get('custom'),'1');
 element('glow').checked=true; element('glow').handlers.change();
 element('backdrop').checked=false; element('backdrop').handlers.change();
 element('example').handlers.click();
@@ -35,4 +38,6 @@ element('bot-command').value = 'track'; element('bot-command').handlers.change()
 assert.equal(element('bot-command').value, '!track');
 assert.equal(element('bot-command-label').textContent, '!track');
 assert.equal(JSON.parse(stored.get('music-studio')).botCommand, '!track');
-console.log('Panel: effects and Streamer.bot settings are saved and URL-encoded; demo stays out of OBS URL');
+element('custom-css').checked=false; element('custom-css').handlers.change();
+assert.equal(new URL(element('url').value).searchParams.has('custom'), false);
+console.log('Panel: effects, custom CSS and Streamer.bot settings are saved and URL-encoded; demo stays out of OBS URL');

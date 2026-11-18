@@ -2,11 +2,13 @@ import asyncio
 import io
 import json
 import sys
+import tempfile
 import threading
 import time
 import unittest
 from datetime import datetime, timezone, timedelta
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from types import SimpleNamespace as Obj
 from unittest.mock import AsyncMock, patch
 from urllib.request import urlopen
@@ -170,6 +172,32 @@ class OverlayTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             worker.join()
+
+    def test_custom_css_api_persists_and_resets_styles(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(
+                app, "CUSTOM_CSS_PATH", Path(folder) / "custom.css"):
+            server = ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+            worker = threading.Thread(target=server.serve_forever, daemon=True)
+            worker.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                css = ".title { color: hotpink; }"
+                request = Request(base + "/api/custom-css", data=css.encode(), method="POST",
+                                  headers={"Content-Type": "text/css; charset=utf-8"})
+                with urlopen(request) as response:
+                    self.assertTrue(json.load(response)["ok"])
+                with urlopen(base + "/api/custom-css") as response:
+                    self.assertEqual(response.headers["Content-Type"], "text/css; charset=utf-8")
+                    self.assertEqual(response.read().decode(), css)
+                request = Request(base + "/api/custom-css", data=b"", method="POST",
+                                  headers={"Content-Type": "text/css; charset=utf-8"})
+                with urlopen(request) as response:
+                    self.assertTrue(json.load(response)["ok"])
+                self.assertEqual(app.read_custom_css(), "")
+            finally:
+                server.shutdown()
+                server.server_close()
+                worker.join()
 
 
 if __name__ == "__main__":

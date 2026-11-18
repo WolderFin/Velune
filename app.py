@@ -17,6 +17,9 @@ from winrt.windows.storage.streams import DataReader
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
+DATA_ROOT = Path(os.environ.get("LOCALAPPDATA", str(ROOT))) / "Velune"
+CUSTOM_CSS_PATH = DATA_ROOT / "custom.css"
+MAX_CUSTOM_CSS = 100 * 1024
 STALE_AFTER = 5
 LOCK = threading.Lock()
 COVERS = OrderedDict()
@@ -64,6 +67,23 @@ def streamerbot_message(state):
         return "Сейчас ничего не играет."
     track = f"{artist} — {title}" if artist else title
     return f"Сейчас играет: {track}"
+
+
+def read_custom_css():
+    try:
+        return CUSTOM_CSS_PATH.read_text(encoding="utf-8")[:MAX_CUSTOM_CSS]
+    except (OSError, UnicodeError):
+        return ""
+
+
+def write_custom_css(css):
+    data = css.encode("utf-8")
+    if len(data) > MAX_CUSTOM_CSS:
+        raise ValueError("custom CSS is too large")
+    CUSTOM_CSS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = CUSTOM_CSS_PATH.with_suffix(".tmp")
+    temporary.write_bytes(data)
+    temporary.replace(CUSTOM_CSS_PATH)
 
 
 def safe_log(*parts):
@@ -262,6 +282,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(json_bytes({"sources": sources, "available": snapshot()["available"], "default_source": DEFAULT_SOURCE}), "application/json; charset=utf-8")
         if path == "/api/current":
             return self.send(json_bytes(snapshot(parse_qs(url.query).get("source", [None])[0])), "application/json; charset=utf-8")
+        if path == "/api/custom-css":
+            return self.send(read_custom_css().encode("utf-8", "replace"),
+                             "text/css; charset=utf-8")
         if path == "/api/streamerbot":
             source = parse_qs(url.query).get("source", [None])[0]
             state = snapshot(source)
@@ -291,6 +314,20 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path == "/api/custom-css":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ("http://127.0.0.1:8765", "http://localhost:8765"):
+                return self.send(b'{"ok":false}', "application/json", 403)
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                if not 0 <= size <= MAX_CUSTOM_CSS:
+                    raise ValueError("invalid body size")
+                css = self.rfile.read(size).decode("utf-8")
+                write_custom_css(css)
+                return self.send(json_bytes({"ok": True, "bytes": len(css.encode("utf-8"))}),
+                                 "application/json; charset=utf-8")
+            except (OSError, UnicodeError, ValueError):
+                return self.send(b'{"ok":false}', "application/json", 400)
         if self.path != "/api/browser-track":
             return self.send(b"", "text/plain", 404)
         origin = self.headers.get("Origin", "")
